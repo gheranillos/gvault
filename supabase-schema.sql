@@ -13,23 +13,57 @@ create table if not exists public.ventas (
 
 alter table public.ventas enable row level security;
 
+drop policy if exists "Usuarios ven sus ventas" on public.ventas;
 create policy "Usuarios ven sus ventas"
   on public.ventas
   for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Usuarios insertan sus ventas" on public.ventas;
 create policy "Usuarios insertan sus ventas"
   on public.ventas
   for insert
   with check (auth.uid() = user_id);
 
+drop policy if exists "Usuarios actualizan sus ventas" on public.ventas;
 create policy "Usuarios actualizan sus ventas"
   on public.ventas
   for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+drop policy if exists "Usuarios borran sus ventas" on public.ventas;
 create policy "Usuarios borran sus ventas"
   on public.ventas
   for delete
   using (auth.uid() = user_id);
+
+create table if not exists public.user_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  business_niche text not null default '',
+  default_investment numeric(12,2) not null default 0,
+  extra_categories jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_profiles enable row level security;
+
+drop policy if exists "Usuarios ven su perfil" on public.user_profiles;
+create policy "Usuarios ven su perfil"
+  on public.user_profiles
+  for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Usuarios crean su perfil" on public.user_profiles;
+create policy "Usuarios crean su perfil"
+  on public.user_profiles
+  for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Usuarios actualizan su perfil" on public.user_profiles;
+create policy "Usuarios actualizan su perfil"
+  on public.user_profiles
+  for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

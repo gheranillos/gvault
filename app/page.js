@@ -18,13 +18,29 @@ const MONTHS = [
   "Diciembre",
 ];
 
-const EXTRA_OPTIONS = [
+const DEFAULT_EXTRA_OPTIONS = [
   { key: "dtf", label: "DTF" },
   { key: "bolsa", label: "Bolsa" },
   { key: "tarjeta", label: "Tarjeta" },
   { key: "stickers", label: "Stickers" },
   { key: "delivery", label: "Delivery" },
 ];
+
+function normalizeExtraCategories(value) {
+  if (!Array.isArray(value)) return DEFAULT_EXTRA_OPTIONS;
+  const cleaned = value
+    .map((item, index) => {
+      const label = typeof item?.label === "string" ? item.label.trim() : "";
+      if (!label) return null;
+      const baseKey =
+        typeof item?.key === "string" && item.key.trim()
+          ? item.key.trim().toLowerCase()
+          : label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      return { key: `${baseKey || "extra"}-${index + 1}`, label };
+    })
+    .filter(Boolean);
+  return cleaned.length ? cleaned : DEFAULT_EXTRA_OPTIONS;
+}
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -43,6 +59,14 @@ export default function Home() {
   const [authMode, setAuthMode] = useState("login");
   const [authData, setAuthData] = useState({ email: "", password: "" });
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    businessNiche: "",
+    defaultInvestment: "",
+    extraCategoriesRaw: "",
+  });
   const [loading, setLoading] = useState(Boolean(supabase));
   const [submittingAuth, setSubmittingAuth] = useState(false);
   const [form, setForm] = useState({
@@ -52,6 +76,10 @@ export default function Home() {
     venta: "",
     costo: "",
   });
+  const extraOptions = useMemo(
+    () => normalizeExtraCategories(profile?.extra_categories),
+    [profile],
+  );
 
   const extrasTotal = useMemo(
     () =>
@@ -91,19 +119,29 @@ export default function Home() {
   useEffect(() => {
     if (!user || !supabase) return;
 
-    const fetchVentas = async () => {
-      const { data, error } = await supabase
+    const fetchUserData = async () => {
+      setProfileLoading(true);
+      const { data: ventasData, error: ventasError } = await supabase
         .from("ventas")
         .select("*")
         .eq("user_id", user.id)
         .order("fecha", { ascending: false });
 
-      if (!error) {
-        setVentas(data ?? []);
+      if (!ventasError) {
+        setVentas(ventasData ?? []);
       }
+
+      const { data: profileData } = await supabase
+        .from("user_profiles")
+        .select("user_id,business_niche,default_investment,extra_categories")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      setProfile(profileData ?? null);
+      setProfileLoading(false);
     };
 
-    fetchVentas();
+    fetchUserData();
   }, [user]);
 
   useEffect(() => {
@@ -111,6 +149,15 @@ export default function Home() {
     const id = setTimeout(() => setToast(""), 2200);
     return () => clearTimeout(id);
   }, [toast]);
+
+  useEffect(() => {
+    if (!profile?.default_investment) return;
+    setForm((prev) =>
+      prev.costo
+        ? prev
+        : { ...prev, costo: String(profile.default_investment) },
+    );
+  }, [profile]);
 
   const monthVentas = useMemo(
     () =>
@@ -171,7 +218,7 @@ export default function Home() {
       producto: "",
       cantidad: "",
       venta: "",
-      costo: "",
+      costo: profile?.default_investment ? String(profile.default_investment) : "",
     });
     setSelectedExtras({});
     setExtrasOpen(false);
@@ -226,6 +273,63 @@ export default function Home() {
     setCurrentMonth(current.getMonth());
     setCurrentYear(current.getFullYear());
     goTo("screen-home");
+  };
+
+  const guardarPerfil = async (e) => {
+    e.preventDefault();
+    if (!supabase || !user) return;
+
+    const businessNiche = profileForm.businessNiche.trim();
+    if (!businessNiche) {
+      setToast("Completa el nicho de tu negocio");
+      return;
+    }
+
+    const defaultInvestment = parseFloat(profileForm.defaultInvestment) || 0;
+    const labels = profileForm.extraCategoriesRaw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const rawCategories = (labels.length ? labels : DEFAULT_EXTRA_OPTIONS.map((v) => v.label)).map(
+      (label, index) => ({
+        key: label.toLowerCase().replace(/[^a-z0-9]+/g, "-") || `extra-${index + 1}`,
+        label,
+      }),
+    );
+    const extraCategories = normalizeExtraCategories(rawCategories);
+
+    setSavingProfile(true);
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .upsert(
+        {
+          user_id: user.id,
+          business_niche: businessNiche,
+          default_investment: defaultInvestment,
+          extra_categories: extraCategories,
+        },
+        { onConflict: "user_id" },
+      )
+      .select("user_id,business_niche,default_investment,extra_categories")
+      .single();
+    setSavingProfile(false);
+
+    if (error) {
+      setToast("Error guardando perfil");
+      return;
+    }
+
+    setProfile(data);
+    setForm((prev) => ({ ...prev, costo: String(defaultInvestment || "") }));
+    setToast("Perfil guardado");
+  };
+
+  const cerrarSesion = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setProfile(null);
+    setVentas([]);
+    resetForm();
   };
 
   const onAuthSubmit = async (e) => {
@@ -329,6 +433,82 @@ export default function Home() {
     );
   }
 
+  if (profileLoading) {
+    return <div className="auth-wrap">Cargando perfil...</div>;
+  }
+
+  if (!profile) {
+    return (
+      <>
+        <div className="auth-wrap">
+          <div className="header-greeting">Personaliza tu panel</div>
+          <div className="auth-title">Configura tu negocio</div>
+          <div className="auth-sub">
+            Esto solo lo completas una vez y queda guardado para tu cuenta.
+          </div>
+          <form className="form-body !px-0" onSubmit={guardarPerfil}>
+            <div className="field-group">
+              <div className="field-label">Nicho de negocio</div>
+              <input
+                className="field-input"
+                type="text"
+                placeholder="Ej: Ropa femenina, barberia..."
+                value={profileForm.businessNiche}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({ ...prev, businessNiche: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div className="field-group">
+              <div className="field-label">Inversion base por venta $</div>
+              <input
+                className="field-input"
+                type="number"
+                min="0"
+                placeholder="0.00"
+                value={profileForm.defaultInvestment}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    defaultInvestment: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="field-group">
+              <div className="field-label">Gastos extra (separados por coma)</div>
+              <input
+                className="field-input"
+                type="text"
+                placeholder="DTF, bolsa, delivery, publicidad"
+                value={profileForm.extraCategoriesRaw}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    extraCategoriesRaw: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <button className="submit-btn" type="submit" disabled={savingProfile}>
+              {savingProfile ? "Guardando..." : "Guardar configuracion"}
+            </button>
+            <button
+              className="submit-btn"
+              type="button"
+              style={{ background: "var(--surface2)", color: "var(--text)" }}
+              onClick={cerrarSesion}
+            >
+              Cambiar de cuenta
+            </button>
+          </form>
+        </div>
+        <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className={`screen ${activeScreen === "screen-home" ? "active" : ""}`}>
@@ -336,8 +516,17 @@ export default function Home() {
           <div>
             <div className="header-greeting">Mi tienda</div>
             <div className="header-name">Hola, {user.email?.split("@")[0]} 👋</div>
+            <div className="auth-sub">
+              Nicho: {profile.business_niche} · inversion base: $
+              {Number(profile.default_investment || 0).toFixed(2)}
+            </div>
           </div>
-          <div className="avatar">
+          <div
+            className="avatar"
+            onClick={cerrarSesion}
+            title="Cerrar sesion"
+            style={{ cursor: "pointer" }}
+          >
             {(user.email?.[0] || "U").toUpperCase()}
           </div>
         </div>
@@ -522,7 +711,7 @@ export default function Home() {
             <input
               className="field-input"
               type="number"
-              placeholder="0.00"
+              placeholder={String(profile.default_investment || "0.00")}
               value={form.costo}
               onChange={(e) => setForm((p) => ({ ...p, costo: e.target.value }))}
             />
@@ -539,7 +728,7 @@ export default function Home() {
             </div>
             <div className={`extras-panel ${extrasOpen ? "open" : ""}`}>
               <div className="chip-row">
-                {EXTRA_OPTIONS.map((opt) => (
+                {extraOptions.map((opt) => (
                   <div
                     className={`chip ${selectedExtras[opt.key] !== undefined ? "active" : ""}`}
                     key={opt.key}
@@ -553,7 +742,7 @@ export default function Home() {
                 {Object.keys(selectedExtras).map((key) => (
                   <div className="field-group" key={key}>
                     <div className="field-label">
-                      {EXTRA_OPTIONS.find((o) => o.key === key)?.label || key} $
+                      {extraOptions.find((o) => o.key === key)?.label || key} $
                     </div>
                     <input
                       className="field-input"

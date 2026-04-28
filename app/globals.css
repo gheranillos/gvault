@@ -342,4 +342,55 @@ body {
 .auth-sub { color: var(--muted); font-size: 13px; }
 .auth-switch { color: var(--accent); cursor: pointer; font-size: 13px; }
 
+.avatar-wrap { position: relative; }
+.avatar {
+  border: none;
+  cursor: pointer;
+}
+.avatar-menu {
+  position: absolute;
+  right: 0;
+  top: 48px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 150px;
+  overflow: hidden;
+  z-index: 150;
+}
+.avatar-menu button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.avatar-menu button:hover { background: var(--surface2); }
+
+.nav-scroll {
+  overflow-x: auto;
+  justify-content: flex-start;
+  gap: 8px;
+}
+.pending-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.pending-card {
+  flex-direction: column;
+  align-items: stretch;
+}
+.pending-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.pending-actions .submit-btn { margin-bottom: 0; }
+
 ::-webkit-scrollbar { width: 0; }

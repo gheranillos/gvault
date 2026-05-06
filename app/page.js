@@ -530,18 +530,34 @@ export default function Home() {
 
     const email = authData.email.trim();
     const password = authData.password;
+    const emailRedirectTo =
+      typeof window !== "undefined" ? `${window.location.origin}/auth/verified` : undefined;
     const action =
       authMode === "register"
-        ? supabase.auth.signUp({ email, password })
+        ? supabase.auth.signUp({
+            email,
+            password,
+            options: { emailRedirectTo },
+          })
         : supabase.auth.signInWithPassword({ email, password });
-    const { error } = await action;
+    const { data, error } = await action;
     setSubmittingAuth(false);
 
     if (error) {
       setToast(error.message);
       return;
     }
-    setToast(authMode === "register" ? "Cuenta creada" : "Sesion iniciada");
+    if (authMode === "register") {
+      if (data?.session) {
+        setToast("Cuenta creada y sesion iniciada");
+      } else {
+        setToast("Revisa tu correo para confirmar la cuenta");
+      }
+      setAuthMode("login");
+      setAuthData((prev) => ({ ...prev, password: "" }));
+      return;
+    }
+    setToast("Sesion iniciada");
   };
 
   if (loading) return <div className="auth-wrap">Cargando...</div>;
@@ -703,6 +719,36 @@ export default function Home() {
 
   return (
     <>
+      <div className={`top-menu-wrap ${avatarMenuOpen ? "open" : ""}`}>
+        <button
+          className="top-menu-btn"
+          onClick={() => setAvatarMenuOpen((prev) => !prev)}
+          title="Abrir menu"
+          type="button"
+          aria-expanded={avatarMenuOpen}
+          aria-label="Abrir menu de navegacion"
+        >
+          ☰
+        </button>
+        <div className="avatar-menu">
+          <button type="button" onClick={() => goTo("screen-home")}>
+            Inicio
+          </button>
+          <button type="button" onClick={() => goTo("screen-yearly")}>
+            Anual
+          </button>
+          <button type="button" onClick={() => goTo("screen-pendientes")}>
+            Pendientes
+          </button>
+          <button type="button" onClick={() => goTo("screen-profile")}>
+            Perfil
+          </button>
+          <button type="button" onClick={cerrarSesion}>
+            Cerrar sesion
+          </button>
+        </div>
+      </div>
+
       <div className={`screen ${activeScreen === "screen-home" ? "active" : ""}`}>
         <div className="header">
           <div>
@@ -713,25 +759,8 @@ export default function Home() {
               {currency(profile.default_investment)}
             </div>
           </div>
-          <div className="avatar-wrap">
-            <button
-              className="avatar"
-              onClick={() => setAvatarMenuOpen((prev) => !prev)}
-              title="Menu de usuario"
-              type="button"
-            >
-              {(username[0] || "U").toUpperCase()}
-            </button>
-            {avatarMenuOpen ? (
-              <div className="avatar-menu">
-                <button type="button" onClick={() => goTo("screen-profile")}>
-                  Perfil
-                </button>
-                <button type="button" onClick={cerrarSesion}>
-                  Cerrar sesion
-                </button>
-              </div>
-            ) : null}
+          <div className="avatar" aria-hidden="true">
+            {(username[0] || "U").toUpperCase()}
           </div>
         </div>
 
@@ -1167,24 +1196,21 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="bottom-nav nav-scroll">
-        <div className={`nav-item ${activeScreen === "screen-home" ? "active" : ""}`} onClick={() => goTo("screen-home")}>
-          <span>Inicio</span>
+      <div className="bottom-nav">
+        <div
+          className={`nav-item ${activeScreen === "screen-historial" ? "active" : ""}`}
+          onClick={() => goTo("screen-historial")}
+        >
+          <span>Historial</span>
         </div>
         <div className="nav-add" onClick={() => goTo("screen-form")}>
           +
         </div>
-        <div className={`nav-item ${activeScreen === "screen-historial" ? "active" : ""}`} onClick={() => goTo("screen-historial")}>
-          <span>Historial</span>
-        </div>
-        <div className={`nav-item ${activeScreen === "screen-calendar" ? "active" : ""}`} onClick={() => goTo("screen-calendar")}>
+        <div
+          className={`nav-item ${activeScreen === "screen-calendar" ? "active" : ""}`}
+          onClick={() => goTo("screen-calendar")}
+        >
           <span>Calendario</span>
-        </div>
-        <div className={`nav-item ${activeScreen === "screen-yearly" ? "active" : ""}`} onClick={() => goTo("screen-yearly")}>
-          <span>Anual</span>
-        </div>
-        <div className={`nav-item ${activeScreen === "screen-pendientes" ? "active" : ""}`} onClick={() => goTo("screen-pendientes")}>
-          <span>Pend.</span>
         </div>
       </div>
 

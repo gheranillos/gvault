@@ -630,7 +630,7 @@ export default function Home() {
               <input
                 className="field-input"
                 type="text"
-                placeholder="Ej: Yeshua"
+                placeholder="Ej: Gherard"
                 value={profileForm.displayName}
                 onChange={(e) =>
                   setProfileForm((prev) => ({ ...prev, displayName: e.target.value }))
@@ -1184,7 +1184,7 @@ export default function Home() {
           <span>Anual</span>
         </div>
         <div className={`nav-item ${activeScreen === "screen-pendientes" ? "active" : ""}`} onClick={() => goTo("screen-pendientes")}>
-          <span>Pendientes</span>
+          <span>Pend.</span>
         </div>
       </div>
 

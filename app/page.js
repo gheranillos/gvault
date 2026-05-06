@@ -69,9 +69,9 @@ export default function Home() {
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [selectedExtras, setSelectedExtras] = useState({});
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
   const [authData, setAuthData] = useState({ email: "", password: "" });
   const [user, setUser] = useState(null);
-  const [accessStatus, setAccessStatus] = useState("idle");
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -235,49 +235,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!user || !supabase) {
-      setAccessStatus("idle");
-      return undefined;
-    }
-    let cancelled = false;
-    (async () => {
-      setAccessStatus("loading");
-      const email = (user.email || "").trim().toLowerCase();
-      if (!email) {
-        if (!cancelled) setAccessStatus("no_email");
-        return;
-      }
-      const { data, error } = await supabase
-        .from("subscriber_access")
-        .select("is_active, access_until")
-        .eq("email", email)
-        .maybeSingle();
-      if (cancelled) return;
-      if (error) {
-        setAccessStatus("error");
-        return;
-      }
-      if (!data) {
-        setAccessStatus("no_row");
-        return;
-      }
-      if (!data.is_active) {
-        setAccessStatus("inactive");
-        return;
-      }
-      if (data.access_until && new Date(data.access_until) < new Date()) {
-        setAccessStatus("expired");
-        return;
-      }
-      setAccessStatus("ok");
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  useEffect(() => {
-    if (!user || !supabase || accessStatus !== "ok") return;
+    if (!user || !supabase) return;
     const fetchUserData = async () => {
       setProfileLoading(true);
 
@@ -330,7 +288,7 @@ export default function Home() {
       setProfileLoading(false);
     };
     fetchUserData();
-  }, [user, accessStatus]);
+  }, [user]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -558,7 +516,6 @@ export default function Home() {
   const cerrarSesion = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
-    setAccessStatus("idle");
     setProfile(null);
     setVentas([]);
     setCuentas([]);
@@ -573,14 +530,18 @@ export default function Home() {
 
     const email = authData.email.trim();
     const password = authData.password;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const action =
+      authMode === "register"
+        ? supabase.auth.signUp({ email, password })
+        : supabase.auth.signInWithPassword({ email, password });
+    const { error } = await action;
     setSubmittingAuth(false);
 
     if (error) {
       setToast(error.message);
       return;
     }
-    setToast("Sesion iniciada");
+    setToast(authMode === "register" ? "Cuenta creada" : "Sesion iniciada");
   };
 
   if (loading) return <div className="auth-wrap">Cargando...</div>;
@@ -600,10 +561,10 @@ export default function Home() {
       <>
         <div className="auth-wrap">
           <div className="header-greeting">Mi tienda</div>
-          <div className="auth-title">Iniciar sesion</div>
-          <div className="auth-sub">
-            El acceso es por invitacion. Si ya pagaste tu suscripcion y no entras, escribenos.
+          <div className="auth-title">
+            {authMode === "login" ? "Iniciar sesion" : "Crear cuenta"}
           </div>
+          <div className="auth-sub">Accede para registrar tus ventas en la nube.</div>
           <form className="form-body !px-0" onSubmit={onAuthSubmit}>
             <div className="field-group">
               <div className="field-label">Email</div>
@@ -631,36 +592,24 @@ export default function Home() {
               />
             </div>
             <button className="submit-btn" type="submit" disabled={submittingAuth}>
-              {submittingAuth ? "Procesando..." : "Entrar"}
+              {submittingAuth
+                ? "Procesando..."
+                : authMode === "login"
+                  ? "Entrar"
+                  : "Crear cuenta"}
             </button>
           </form>
-        </div>
-        <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
-      </>
-    );
-  }
-
-  if (accessStatus === "loading" || accessStatus === "idle") {
-    return <div className="auth-wrap">Verificando acceso...</div>;
-  }
-
-  if (accessStatus !== "ok") {
-    const blockedCopy = {
-      no_row: "Este correo no tiene acceso al sistema. Si ya contrataste el servicio, contactanos para activarlo.",
-      inactive: "Tu acceso esta desactivado. Cuando renueves la suscripcion lo volvemos a encender.",
-      expired: "Tu periodo de suscripcion termino. Contactanos para renovar.",
-      no_email: "Tu cuenta no tiene correo asociado. Contacta soporte.",
-      error: "No pudimos verificar tu acceso. Intenta de nuevo en unos minutos.",
-    };
-    return (
-      <>
-        <div className="auth-wrap">
-          <div className="header-greeting">Mi tienda</div>
-          <div className="auth-title">Sin acceso</div>
-          <div className="auth-sub">{blockedCopy[accessStatus] || blockedCopy.error}</div>
-          <button className="submit-btn" type="button" onClick={cerrarSesion}>
-            Cerrar sesion
-          </button>
+          <div className="auth-sub">
+            {authMode === "login" ? "No tienes cuenta?" : "Ya tienes cuenta?"}{" "}
+            <span
+              className="auth-switch"
+              onClick={() =>
+                setAuthMode((prev) => (prev === "login" ? "register" : "login"))
+              }
+            >
+              {authMode === "login" ? "Registrate" : "Inicia sesion"}
+            </span>
+          </div>
         </div>
         <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
       </>

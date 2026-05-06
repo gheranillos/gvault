@@ -149,36 +149,3 @@ create policy "Usuarios borran sus abonos"
   on public.abonos_cobro
   for delete
   using (auth.uid() = user_id);
-
--- -----------------------------------------------------------------------------
--- Suscripciones / lista de acceso (solo vos administrás con SQL o service role)
--- - Cada cliente debe tener una fila con el mismo email que usa en Auth (minusculas).
--- - is_active: encendido / apagado manual (cobro o no).
--- - access_until: null = sin fecha de fin; si pasa esa fecha el acceso cuenta como vencido.
--- En Supabase: Authentication -> Providers -> Email -> desactiva "Confirm email" solo si conviene,
--- y desactiva registro público si queres solo invitaciones (opcional pero recomendado).
--- Migración one-shot para usuarias ya existentes en auth.users (opcional):
---   insert into public.subscriber_access (email, is_active)
---   select lower(trim(email)), true from auth.users where email is not null
---   on conflict (email) do nothing;
-create table if not exists public.subscriber_access (
-  email text primary key check (email = lower(trim(email))),
-  is_active boolean not null default false,
-  access_until timestamptz,
-  note text not null default '',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists idx_subscriber_access_active on public.subscriber_access (is_active);
-
-alter table public.subscriber_access enable row level security;
-
-drop policy if exists "Suscriptores leen solo su fila" on public.subscriber_access;
-create policy "Suscriptores leen solo su fila"
-  on public.subscriber_access
-  for select
-  using (
-    auth.role() = 'authenticated'
-    and email = lower(trim(coalesce(auth.jwt() ->> 'email', '')))
-  );
